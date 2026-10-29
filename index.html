@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Audit hygiène</title>
+  <meta name="theme-color" content="#1f5c55">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Audit hygiène">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="barre">
+    <button id="btn-retour" class="btn-icone" aria-label="Retour" hidden>&#8249;</button>
+    <h1 id="titre">Audit hygiène</h1>
+    <span id="barre-droite"></span>
+  </header>
+
+  <main id="app"></main>
+
+  <div id="feuille-fond" class="feuille-fond" hidden></div>
+  <section id="feuille" class="feuille" hidden aria-modal="true" role="dialog"></section>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="referentiels.js"></script>
+  <script src="lib/xlsx.full.min.js" defer></script>
+  <script src="lib/jspdf.umd.min.js" defer></script>
+  <script src="lib/jspdf.plugin.autotable.min.js" defer></script>
+  <script src="exports.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
