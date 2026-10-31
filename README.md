@@ -30,6 +30,13 @@ Les audits déjà commencés gardent leur grille d'origine.
 Depuis l'écran **Synthèse et export** : PDF (rapport), Excel (colonne 1 fusionnée), CSV (séparateur `;`, s'ouvre
 directement dans Excel en français). Le menu de partage du téléphone s'ouvre : Drive, Mail, Fichiers, etc.
 
+## Photos
+
+Dans la fenêtre d'un commentaire : **Prendre ou ajouter une photo** (appareil photo ou photothèque).
+Les photos sont réduites (~200 Ko), numérotées dans l'ordre de la grille et placées dans l'**annexe du PDF**,
+chacune précédée du point audité, de son statut et de son commentaire. Le tableau indique « Photo n en annexe ».
+Les exports CSV / Excel mentionnent les numéros de photos (sans les images).
+
 ## Données
 
 Les audits sont stockés **sur l'appareil uniquement**. Utiliser régulièrement **Exporter la sauvegarde** sur l'accueil
@@ -41,7 +48,8 @@ Les audits sont stockés **sur l'appareil uniquement**. Utiliser régulièrement
 |---|---|
 | `index.html` | Page de l'application |
 | `app.js` | Écrans, saisie, stockage local |
-| `exports.js` | Exports CSV, Excel, PDF, sauvegarde |
+| `exports.js` | Exports CSV, Excel, PDF (avec annexe photos), sauvegarde |
+| `photos.js` | Stockage et compression des photos |
 | `referentiels.js` | **Grilles d'audit à personnaliser** |
 | `app.css` | Apparence (thème clair/sombre automatique) |
 | `sw.js` | Mode hors ligne |

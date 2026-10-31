@@ -99,7 +99,10 @@
       '<button class="btn" id="imp">Importer</button></div>' +
       '<input type="file" id="fichier-imp" accept=".json,application/json" hidden></div>');
     app.appendChild(outils);
-    outils.querySelector("#sauv").addEventListener("click", function () { Exports.sauvegarde(audits); });
+    outils.querySelector("#sauv").addEventListener("click", function () {
+      Promise.resolve().then(function () { return Exports.sauvegarde(audits); })
+        .catch(function (e) { toast("Sauvegarde impossible : " + (e && e.message)); });
+    });
     var input = outils.querySelector("#fichier-imp");
     outils.querySelector("#imp").addEventListener("click", function () { input.click(); });
     input.addEventListener("change", function () {
@@ -117,7 +120,15 @@
             if (i >= 0) audits[i] = a; else audits.push(a);
             ajoutes++;
           });
-          sauver(); afficherAccueil(); toast(ajoutes + " audit(s) importé(s)");
+          sauver();
+          var photos = (data && data.photos) || {};
+          Promise.all(Object.keys(photos).map(function (id) { return Photos.enregistrer(id, photos[id]); }))
+            .then(function () {
+              afficherAccueil();
+              var n = Object.keys(photos).length;
+              toast(ajoutes + " audit(s) importé(s)" + (n ? ", " + n + " photo(s)" : ""));
+            })
+            .catch(function () { afficherAccueil(); toast("Audits importés, mais certaines photos n'ont pas pu être enregistrées"); });
         } catch (e) { toast("Fichier de sauvegarde invalide"); }
       };
       r.readAsText(f);
@@ -230,14 +241,15 @@
     }).join("") + '</div>';
   }
   function cellCommentaire(p, i, j, tag) {
-    var contenu;
-    if (!p.choix.length && !(p.texte && p.texte.trim())) {
-      contenu = "Ajouter un commentaire";
+    var contenu, nbPhotos = (p.photos || []).length;
+    var vide = !p.choix.length && !(p.texte && p.texte.trim()) && !nbPhotos;
+    if (vide) {
+      contenu = "Ajouter un commentaire ou une photo";
     } else {
       contenu = p.choix.map(function (c) { return '<span class="choix">• ' + esc(c) + '</span>'; }).join("") +
-        (p.texte && p.texte.trim() ? '<span class="choix">' + esc(p.texte.trim()) + '</span>' : "");
+        (p.texte && p.texte.trim() ? '<span class="choix">' + esc(p.texte.trim()) + '</span>' : "") +
+        (nbPhotos ? '<span class="nb-photos">' + nbPhotos + ' photo' + (nbPhotos > 1 ? 's' : '') + ' en annexe</span>' : "");
     }
-    var vide = !p.choix.length && !(p.texte && p.texte.trim());
     return '<' + tag + ' class="commentaire' + (vide ? ' vide-c' : '') + '" data-com="1" data-i="' + i + '" data-j="' + j + '">' + contenu + '</' + tag + '>';
   }
 
@@ -272,6 +284,10 @@
         return '<button class="puce' + (choix.indexOf(m) >= 0 ? ' sel' : '') + '" data-k="' + k + '" aria-pressed="' + (choix.indexOf(m) >= 0) + '">' + esc(m) + '</button>';
       }).join("") + '</div>' +
       '<textarea id="texte-libre" placeholder="Texte libre (précisions, localisation, action corrective...)">' + esc(p.texte) + '</textarea>' +
+      '<div class="photos-titre">Photos (mises en annexe avec ce commentaire)</div>' +
+      '<div class="vignettes" id="vignettes"></div>' +
+      '<button class="btn btn-bloc" id="f-photo-btn">Prendre ou ajouter une photo</button>' +
+      '<input type="file" accept="image/*" id="f-photo" hidden>' +
       '<div class="rangee" style="margin-top:12px"><button class="btn" id="f-effacer">Effacer</button>' +
       '<button class="btn btn-principal" id="f-ok">Valider</button></div>';
 
@@ -291,19 +307,55 @@
         b.classList.toggle("sel", idx < 0); b.setAttribute("aria-pressed", idx < 0);
       });
     });
+    /* Photos : enregistrées tout de suite (pas besoin de « Valider ») */
+    if (!p.photos) p.photos = [];
+    var vignettes = feuille.querySelector("#vignettes");
+    var inputPhoto = feuille.querySelector("#f-photo");
+    var btnPhoto = feuille.querySelector("#f-photo-btn");
+    function afficherVignettes() {
+      vignettes.innerHTML = "";
+      p.photos.forEach(function (id) {
+        var v = el('<div class="vignette"><img alt="Photo"><button class="suppr-photo" aria-label="Supprimer la photo">&times;</button></div>');
+        Photos.lire(id).then(function (d) { if (d) v.querySelector("img").src = d; });
+        v.querySelector(".suppr-photo").addEventListener("click", function () {
+          if (!confirm("Supprimer cette photo ?")) return;
+          p.photos = p.photos.filter(function (x) { return x !== id; });
+          sauver(); Photos.supprimer(id).catch(function () {}); afficherVignettes();
+        });
+        vignettes.appendChild(v);
+      });
+    }
+    afficherVignettes();
+    btnPhoto.addEventListener("click", function () { inputPhoto.value = ""; inputPhoto.click(); });
+    inputPhoto.addEventListener("change", function () {
+      var f = inputPhoto.files && inputPhoto.files[0]; if (!f) return;
+      btnPhoto.textContent = "Enregistrement de la photo…"; btnPhoto.disabled = true;
+      Photos.compresser(f).then(function (r) {
+        var id = Photos.nouvelId();
+        return Photos.enregistrer(id, r.dataUrl).then(function () {
+          p.photos.push(id); sauver(); afficherVignettes();
+        });
+      }).catch(function (e) {
+        toast("Photo non enregistrée : " + (e && e.message ? e.message : "erreur"));
+      }).then(function () {
+        btnPhoto.textContent = "Prendre ou ajouter une photo"; btnPhoto.disabled = false;
+      });
+    });
+
     feuille.querySelector("#f-effacer").addEventListener("click", function () {
       choix = []; document.getElementById("texte-libre").value = "";
       feuille.querySelectorAll(".puce").forEach(function (b) { b.classList.remove("sel"); });
     });
     feuille.querySelector("#f-ok").addEventListener("click", function () {
       p.choix = choix; p.texte = document.getElementById("texte-libre").value; p.statut = statut;
-      sauver(); fermerFeuille(); afficherGrille();
+      sauver(); fermerFeuille();
     });
     feuille.hidden = false; feuilleFond.hidden = false;
     document.body.style.overflow = "hidden";
   }
   function fermerFeuille() {
     feuille.hidden = true; feuilleFond.hidden = true; document.body.style.overflow = "";
+    if (ecran === "grille") afficherGrille();
   }
   feuilleFond.addEventListener("click", fermerFeuille);
 
@@ -332,15 +384,19 @@
       '<div class="carte"><h2>Non-conformités (' + ncs.length + ')</h2>' +
       (ncs.length ? ncs.map(function (x) {
         return '<div class="nc-item"><small>' + esc(x.r) + '</small>' + esc(x.p.libelle) +
-          (texteCommentaire(x.p) ? '<small>' + esc(texteCommentaire(x.p)) + '</small>' : '') + '</div>';
+          (texteCommentaire(x.p) ? '<small>' + esc(texteCommentaire(x.p)) + '</small>' : '') +
+          ((x.p.photos || []).length ? '<small>' + x.p.photos.length + ' photo(s) en annexe</small>' : '') + '</div>';
       }).join("") : '<p class="discret">Aucune non-conformité relevée.</p>') + '</div>' +
       '<div class="rangee"><button class="btn" id="terminer">' + (a.termine ? "Rouvrir l'audit" : "Marquer comme terminé") + '</button>' +
       '<button class="btn btn-danger" id="supprimer">Supprimer l\'audit</button></div>';
 
     app.querySelectorAll("[data-exp]").forEach(function (b) {
       b.addEventListener("click", function () {
-        try { Exports[b.dataset.exp](a); }
-        catch (err) { console.error(err); toast("Export impossible : " + err.message); }
+        var texte = b.textContent;
+        b.textContent = "Préparation…";
+        Promise.resolve().then(function () { return Exports[b.dataset.exp](a); })
+          .catch(function (err) { console.error(err); toast("Export impossible : " + (err && err.message)); })
+          .then(function () { b.textContent = texte; });
       });
     });
     document.getElementById("terminer").addEventListener("click", function () {
@@ -349,6 +405,9 @@
     });
     document.getElementById("supprimer").addEventListener("click", function () {
       if (!confirm("Supprimer définitivement cet audit ?")) return;
+      a.grille.forEach(function (r) { r.points.forEach(function (p) {
+        (p.photos || []).forEach(function (id) { Photos.supprimer(id).catch(function () {}); });
+      }); });
       audits = audits.filter(function (x) { return x.id !== a.id; });
       sauver(); afficherAccueil(); toast("Audit supprimé");
     });
