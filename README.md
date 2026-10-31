@@ -37,6 +37,20 @@ Les photos sont réduites (~200 Ko), numérotées dans l'ordre de la grille et p
 chacune précédée du point audité, de son statut et de son commentaire. Le tableau indique « Photo n en annexe ».
 Les exports CSV / Excel mentionnent les numéros de photos (sans les images).
 
+## Rapport Word
+
+Synthèse et export > **Préparer le rapport Word** :
+1. Vérifier civilité, adresse, n° d'audit, technicienne.
+2. **Copier l'audit et ouvrir le Projet Claude** : dans le projet, nouvelle conversation, coller, envoyer,
+   puis bouton « Copier » sous la réponse.
+3. Revenir dans l'app : **Coller la réponse de l'assistant**, relire.
+4. **Générer le Word** > Enregistrer ou Partager.
+
+L'adresse du projet se règle une fois dans Accueil > **Réglages**. Le Word est produit à partir de
+`modele_rapport.docx` (logos, lettre, références réglementaires) : sections numérotées 1 à 4,
+phrases [À VÉRIFIER] surlignées en jaune, photos en annexe. Un relais IA payant à l'usage reste possible
+(Réglages, facultatif), mais n'est pas nécessaire.
+
 ## Données
 
 Les audits sont stockés **sur l'appareil uniquement**. Utiliser régulièrement **Exporter la sauvegarde** sur l'accueil
@@ -50,6 +64,7 @@ Les audits sont stockés **sur l'appareil uniquement**. Utiliser régulièrement
 | `app.js` | Écrans, saisie, stockage local |
 | `exports.js` | Exports CSV, Excel, PDF (avec annexe photos), sauvegarde |
 | `photos.js` | Stockage et compression des photos |
+| `rapport.js`, `modele_rapport.docx` | Rapport Word au format CHSA |
 | `referentiels.js` | **Grilles d'audit à personnaliser** |
 | `app.css` | Apparence (thème clair/sombre automatique) |
 | `sw.js` | Mode hors ligne |

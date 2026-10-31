@@ -330,7 +330,7 @@
     out.push("AUDIT HYGIÈNE - données saisies dans l'application");
     out.push("Établissement : " + a.etablissement);
     out.push("Type d'établissement : " + a.typeNom);
-    if (a.adresse) out.push("Adresse : " + a.adresse);
+    if (a.adresse || a.cpVille) out.push("Adresse : " + [a.adresse, a.cpVille].filter(Boolean).join(", "));
     if (a.numero) out.push("N° audit : " + a.numero);
     out.push("Date audit : " + U().dateFr(a.date));
     if (a.auditeur) out.push("Technicienne : " + a.auditeur);
@@ -365,5 +365,5 @@
     });
   }
 
-  window.Exports = { csv: csv, xlsx: xlsx, pdf: pdf, sauvegarde: sauvegarde, assistant: assistant, texteAssistant: texteAssistant };
+  window.Exports = { csv: csv, xlsx: xlsx, pdf: pdf, sauvegarde: sauvegarde, assistant: assistant, texteAssistant: texteAssistant, livrer: partager };
 })();

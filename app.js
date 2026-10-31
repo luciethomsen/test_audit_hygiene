@@ -131,6 +131,10 @@
       '<button class="btn" id="imp">Importer</button></div>' +
       '<input type="file" id="fichier-imp" accept=".json,application/json" hidden></div>');
     app.appendChild(outils);
+    var reg = el('<div class="carte"><h2>Réglages</h2><p class="discret">Lien du Projet Claude pour les rapports Word, nom de la technicienne.</p>' +
+      '<button class="btn" id="reglages">Ouvrir les réglages</button></div>');
+    app.appendChild(reg);
+    reg.querySelector("#reglages").addEventListener("click", afficherReglages);
     outils.querySelector("#sauv").addEventListener("click", function () {
       Promise.resolve().then(function () { return Exports.sauvegarde(audits); })
         .catch(function (e) { toast("Sauvegarde impossible : " + (e && e.message)); });
@@ -178,7 +182,9 @@
       '<div class="carte">' +
       '<label class="champ"><span>Établissement</span><input id="f-etab" autocomplete="off" placeholder="Boulangerie Martin"><div class="erreur" id="err-etab" hidden>Indique le nom de l\'établissement.</div></label>' +
       '<label class="champ"><span>Type d\'établissement</span><select id="f-type">' + options + '</select></label>' +
-      '<label class="champ"><span>Adresse</span><input id="f-adr" autocomplete="off" placeholder="12 rue de la République, Lyon"></label>' +
+      '<label class="champ"><span>Adresse (rue)</span><input id="f-adr" autocomplete="off" placeholder="12 rue de la République"></label>' +
+      '<label class="champ"><span>Code postal et ville</span><input id="f-cpv" autocomplete="off" placeholder="69007 Lyon"></label>' +
+      '<label class="champ"><span>Civilité du gérant (pour la lettre)</span><select id="f-civ"><option>Monsieur</option><option>Madame</option><option>Madame, Monsieur</option></select></label>' +
       '<label class="champ"><span>N° d\'audit</span><input id="f-num" autocomplete="off" inputmode="numeric"></label>' +
       '<label class="champ"><span>Réalisé le</span><input id="f-date" type="date" value="' + aujourdhui() + '"></label>' +
       '<label class="champ"><span>Par (auditeur)</span><input id="f-aud" autocomplete="off" value="' + esc(localStorage.getItem("auditeur") || "") + '"></label>' +
@@ -197,6 +203,8 @@
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         etablissement: etab.value.trim(),
         adresse: document.getElementById("f-adr").value.trim(),
+        cpVille: document.getElementById("f-cpv").value.trim(),
+        civilite: document.getElementById("f-civ").value,
         typeNom: type,
         numero: document.getElementById("f-num").value.trim(),
         date: document.getElementById("f-date").value || aujourdhui(),
@@ -510,6 +518,141 @@
     document.body.style.overflow = "hidden";
   }
 
+  /* ---------- Réglages ---------- */
+  function lireReglage(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }
+  function ecrireReglage(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function afficherReglages() {
+    ecran = "reglages"; nettoyerBarreBas();
+    barre("Réglages", afficherAccueil);
+    app.innerHTML = '<div class="carte"><h2>Projet Claude</h2>' +
+      '<p class="discret">Ouvre ton projet « Rapports CHSA » sur claude.ai, copie l\'adresse de la page (elle commence par https://claude.ai/project/) et colle-la ici.</p>' +
+      '<label class="champ"><span>Adresse du projet</span><input id="r-projet" autocomplete="off" inputmode="url" placeholder="https://claude.ai/project/..."></label></div>' +
+      '<div class="carte"><h2>Relais IA (facultatif, payant à l\'usage)</h2>' +
+      '<p class="discret">Seulement si un relais Cloudflare a été installé. Laisser vide pour utiliser le Projet Claude.</p>' +
+      '<label class="champ"><span>Adresse du relais</span><input id="r-url" autocomplete="off" inputmode="url" placeholder="https://rapport-chsa.xxx.workers.dev"></label>' +
+      '<label class="champ"><span>Code d\'accès</span><input id="r-code" type="password" autocomplete="off"></label>' +
+      '<button class="btn" id="r-test">Tester la connexion</button><div class="discret" id="r-res" style="margin-top:8px"></div></div>' +
+      '<div class="carte"><h2>Technicienne</h2><label class="champ"><span>Nom proposé pour les nouveaux audits</span><input id="r-tech" autocomplete="off"></label></div>';
+    var url = document.getElementById("r-url"), code = document.getElementById("r-code"), tech = document.getElementById("r-tech");
+    var projet = document.getElementById("r-projet");
+    url.value = lireReglage("relaisUrl"); code.value = lireReglage("relaisCode"); tech.value = lireReglage("auditeur");
+    projet.value = lireReglage("projetClaude");
+    projet.addEventListener("input", function () { ecrireReglage("projetClaude", projet.value.trim()); });
+    url.addEventListener("input", function () { ecrireReglage("relaisUrl", url.value.trim()); });
+    code.addEventListener("input", function () { ecrireReglage("relaisCode", code.value.trim()); });
+    tech.addEventListener("input", function () { ecrireReglage("auditeur", tech.value.trim()); });
+    document.getElementById("r-test").addEventListener("click", function () {
+      var res = document.getElementById("r-res"); res.textContent = "Test en cours…";
+      appelRelais({ test: true }).then(function () { res.textContent = "Connexion OK."; },
+        function (e) { res.textContent = "Échec : " + e.message; });
+    });
+  }
+
+  /* Appel du relais (Cloudflare Worker) qui interroge l'IA avec la bibliothèque CHSA */
+  function appelRelais(corps) {
+    var url = lireReglage("relaisUrl"), code = lireReglage("relaisCode");
+    if (!url) return Promise.reject(new Error("adresse du relais non renseignée (Réglages)"));
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var minuteur = setTimeout(function () { if (ctrl) ctrl.abort(); }, 150000);
+    return fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Code-Acces": code },
+      body: JSON.stringify(corps), signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) throw new Error(j.erreur || ("erreur " + r.status));
+          return j;
+        });
+      }, function (e) {
+        throw new Error(e && e.name === "AbortError" ? "délai dépassé" : "réseau indisponible ou adresse incorrecte");
+      })
+      .then(function (j) { clearTimeout(minuteur); return j; }, function (e) { clearTimeout(minuteur); throw e; });
+  }
+
+  /* ---------- Rapport Word ---------- */
+  function afficherRapport() {
+    ecran = "rapport"; nettoyerBarreBas();
+    var a = auditCourant;
+    barre("Rapport Word", afficherSynthese);
+    if (!a.civilite) a.civilite = "Monsieur";
+    var relais = !!lireReglage("relaisUrl");
+    app.innerHTML =
+      '<div class="carte"><h2>Lettre et en-tête</h2>' +
+      '<label class="champ"><span>Civilité du gérant</span><select id="w-civ"><option>Monsieur</option><option>Madame</option><option>Madame, Monsieur</option></select></label>' +
+      '<label class="champ"><span>Adresse (rue)</span><input id="w-adr" autocomplete="off"></label>' +
+      '<label class="champ"><span>Code postal et ville</span><input id="w-cpv" autocomplete="off"></label>' +
+      '<label class="champ"><span>N° audit</span><input id="w-num" autocomplete="off" placeholder="1/2"></label>' +
+      '<label class="champ"><span>Technicienne</span><input id="w-tech" autocomplete="off"></label></div>' +
+      '<div class="carte"><h2>Texte du rapport</h2>' +
+      '<button class="btn btn-principal btn-bloc" id="w-copier">1. Copier l\'audit et ouvrir le Projet Claude</button>' +
+      '<p class="discret" style="margin:6px 0 12px">Dans le projet : nouvelle conversation, coller, envoyer. Puis bouton « Copier » sous la réponse.</p>' +
+      '<button class="btn btn-principal btn-bloc" id="w-coller">2. Coller la réponse de l\'assistant</button>' +
+      '<p class="discret" id="w-etat" style="margin:6px 0 12px"></p>' +
+      (relais ? '<button class="btn btn-bloc" id="w-ia">' + (a.rapportTexte ? "Rédiger à nouveau via le relais" : "Rédiger via le relais") + '</button>' : '') +
+      '<textarea id="w-texte" class="texte-rapport" placeholder="## 1. LOCAUX - EQUIPEMENTS&#10;- **Action** ..."></textarea>' +
+      '<p class="discret" style="margin-top:6px">Tu peux corriger le texte ici. Les lignes [À VÉRIFIER] seront surlignées en jaune dans le Word. Ce qui suit la ligne « --- » (notes de l\'assistant) n\'est pas repris.</p></div>';
+    var champs = { "w-civ": "civilite", "w-adr": "adresse", "w-cpv": "cpVille", "w-num": "numero", "w-tech": "auditeur", "w-texte": "rapportTexte" };
+    Object.keys(champs).forEach(function (id) {
+      var e = document.getElementById(id);
+      e.value = a[champs[id]] || "";
+      e.addEventListener(e.tagName === "SELECT" ? "change" : "input", function () { a[champs[id]] = e.value; sauver(); });
+    });
+    var etatTxt = document.getElementById("w-etat");
+    document.getElementById("w-copier").addEventListener("click", function () {
+      var texte = Exports.texteAssistant(a);
+      var lien = lireReglage("projetClaude") || "https://claude.ai/projects";
+      var copie = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(texte) : Promise.reject();
+      /* ouverture immédiate, dans le même appui (sinon le navigateur bloque) */
+      window.open(lien, "_blank");
+      copie.then(function () { toast("Audit copié : colle-le dans une nouvelle conversation du projet"); },
+        function () { toast("Copie impossible : utilise « Texte pour l'assistant IA » dans la synthèse"); });
+      if (!lireReglage("projetClaude")) etatTxt.textContent = "Astuce : enregistre l'adresse de ton projet dans les Réglages pour l'ouvrir directement.";
+    });
+    document.getElementById("w-coller").addEventListener("click", function () {
+      var zone = document.getElementById("w-texte");
+      function appliquer(t) {
+        if (!t || !t.trim()) { etatTxt.textContent = "Le presse-papiers est vide : copie d'abord la réponse de l'assistant."; return; }
+        if (a.rapportTexte && a.rapportTexte.trim() && a.rapportTexte !== t && !confirm("Remplacer le texte actuel par la réponse collée ?")) return;
+        a.rapportTexte = t; sauver(); zone.value = t;
+        var n = RapportWord.lire(t).length;
+        if (!n) etatTxt.textContent = "Texte collé, mais aucune section « 1. LOCAUX - EQUIPEMENTS »... trouvée : vérifie que c'est bien la réponse de l'assistant.";
+        else if (t.indexOf("**") < 0) etatTxt.textContent = "Texte collé, mais sans le gras : copie la réponse avec le bouton « Copier » sous la réponse plutôt qu'en sélectionnant le texte.";
+        else etatTxt.textContent = "Réponse collée (" + n + " section" + (n > 1 ? "s" : "") + "). Relis-la, puis génère le Word.";
+      }
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(appliquer, function () {
+          zone.focus();
+          etatTxt.textContent = "Collage automatique refusé : appui long dans la zone de texte ci-dessous, puis « Coller ».";
+        });
+      } else {
+        zone.focus();
+        etatTxt.textContent = "Appui long dans la zone de texte ci-dessous, puis « Coller ».";
+      }
+    });
+    if (relais) document.getElementById("w-ia").addEventListener("click", function () {
+      var b = this, etat = document.getElementById("w-etat");
+      if (a.rapportTexte && a.rapportTexte.trim() && !confirm("Remplacer le texte actuel par une nouvelle rédaction ?")) return;
+      b.disabled = true; b.textContent = "Rédaction en cours…"; etat.textContent = "L'assistant rédige le rapport (30 s à 1 min)…";
+      appelRelais({ texte: Exports.texteAssistant(a) }).then(function (j) {
+        a.rapportTexte = j.texte || ""; sauver();
+        document.getElementById("w-texte").value = a.rapportTexte;
+        etat.textContent = "Texte rédigé. Relis-le, puis génère le Word.";
+      }).catch(function (e) {
+        etat.textContent = "Rédaction impossible : " + e.message;
+      }).then(function () { b.disabled = false; b.textContent = "Rédiger à nouveau via le relais"; });
+    });
+
+    var bas = el('<div class="barre-bas"><div class="interieur"><button class="btn btn-principal" id="w-gen">Générer le Word</button></div></div>');
+    document.body.appendChild(bas);
+    bas.querySelector("#w-gen").addEventListener("click", function () {
+      var b = this;
+      if (!a.rapportTexte || !a.rapportTexte.trim()) { toast("Le texte du rapport est vide"); return; }
+      b.disabled = true; b.textContent = "Génération…";
+      RapportWord.generer(a, a.rapportTexte).then(function (blob) {
+        return Exports.livrer(blob, RapportWord.nomFichier(a), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      }).catch(function (e) { console.error(e); toast("Word impossible : " + (e && e.message)); })
+        .then(function () { b.disabled = false; b.textContent = "Générer le Word"; });
+    });
+  }
+
   /* ---------- Synthèse ---------- */
   function afficherSynthese() {
     ecran = "synthese"; nettoyerBarreBas();
@@ -533,6 +676,8 @@
       '<div class="stat"><b style="color:var(--c)">' + c.C + '</b><span>Conformes</span></div>' +
       '<div class="stat"><b style="color:var(--nc)">' + c.NC + '</b><span>Non conformes</span></div>' +
       '<div class="stat"><b>' + (c.total - c.evalues) + '</b><span>Non évalués' + (c.NA ? ' (' + c.NA + ' NA)' : '') + '</span></div></div>' +
+      '<div class="carte"><h2>Rapport Word</h2><p class="discret">Lettre et rapport au format CHSA, rédigés avec ton Projet Claude, photos en annexe.</p>' +
+      '<button class="btn btn-principal btn-bloc" id="vers-rapport">Préparer le rapport Word</button></div>' +
       '<div class="carte"><h2>Exporter</h2><p class="discret">Le menu de partage s\'ouvre : choisis Drive, Mail, Fichiers...</p>' +
       '<div class="rangee"><button class="btn" data-exp="pdf">Rapport PDF</button>' +
       '<button class="btn" data-exp="xlsx">Excel</button><button class="btn" data-exp="csv">CSV</button></div>' +
@@ -556,6 +701,7 @@
       });
     });
     document.getElementById("modif-ech").addEventListener("click", ouvrirEchantillons);
+    document.getElementById("vers-rapport").addEventListener("click", afficherRapport);
     document.getElementById("terminer").addEventListener("click", function () {
       a.termine = !a.termine; sauver(); afficherSynthese();
       toast(a.termine ? "Audit terminé" : "Audit rouvert");

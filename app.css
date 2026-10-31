@@ -170,3 +170,5 @@ table.grille { width: 100%; border-collapse: collapse; table-layout: fixed; back
 .ech-ligne label.champ { flex: 1; margin-bottom: 10px; }
 .suppr-ech { width: 44px; height: 44px; margin-bottom: 10px; border-radius: var(--rayon); border: 1px solid var(--bordure);
   background: var(--surface); color: var(--nc); font-size: 22px; cursor: pointer; flex-shrink: 0; }
+.texte-rapport { width: 100%; min-height: 320px; padding: 10px; border: 1px solid var(--bordure); border-radius: var(--rayon);
+  background: var(--fond); font-size: 14px; line-height: 1.45; resize: vertical; }
