@@ -110,10 +110,11 @@
   }
   function csv(a) {
     var entete = ["N° audit", "Établissement", "Adresse", "Type d'établissement", "Date", "Auditeur",
-      "Responsable rencontré", "Rapport", "Type de points", "Points audités", "C/NC", "Commentaire / détails"];
+      "Responsable rencontré", "Rapport", "Échantillons prélevés", "Type de points", "Points audités", "C/NC", "Commentaire / détails"];
+    var ech = U().lignesEchantillons(a).join(" | ");
     var rows = [entete].concat(lignes(a).map(function (l) {
       return [a.numero || "", a.etablissement, a.adresse || "", a.typeNom, U().dateFr(a.date), a.auditeur || "",
-        a.responsable || "", a.rapport || "", l.rubrique, l.point, l.statut, l.commentaire];
+        a.responsable || "", a.rapport || "", ech, l.rubrique, l.point, l.statut, l.commentaire];
     }));
     var texte = "﻿" + rows.map(function (r) { return r.map(champCsv).join(";"); }).join("\r\n");
     return partager(new Blob([texte], { type: "text/csv;charset=utf-8" }), nomFichier(a, "csv"), "text/csv");
@@ -132,10 +133,15 @@
       ["Par", a.auditeur || ""],
       ["Responsable rencontré", a.responsable || ""],
       ["Rapport", a.rapport || ""],
-      ["Taux de conformité", c.taux === null ? "" : c.taux + " %"],
+      ["Taux de conformité", c.taux === null ? "" : c.taux + " %"]
+    ];
+    U().lignesEchantillons(a).forEach(function (l) {
+      var k = l.indexOf(" : "); aoa.push([l.slice(0, k), l.slice(k + 3)]);
+    });
+    aoa = aoa.concat([
       [],
       ["Type de points", "Points audités", "C/NC", "Commentaire / détails"]
-    ];
+    ]);
     var debut = aoa.length;
     var merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
     a.grille.forEach(function (r) {
@@ -200,10 +206,11 @@
     doc.setFontSize(10);
     var infos = [
       "Établissement : " + a.etablissement + " (" + a.typeNom + ")" + (a.adresse ? " - " + a.adresse : ""),
-      a.responsable ? "Responsable rencontré : " + a.responsable : "",
+      a.responsable ? "Responsable rencontré : " + a.responsable : ""
+    ].concat(U().lignesEchantillons(a)).concat([
       "Points évalués : " + c.evalues + "/" + c.total + "     Conformes : " + c.C + "     Non conformes : " + c.NC +
         (c.NA ? "     Non applicables : " + c.NA : "") + "     Taux de conformité : " + (c.taux === null ? "-" : c.taux + " %")
-    ].filter(Boolean);
+    ]).filter(Boolean);
     infos.forEach(function (t, k) { doc.text(pdfTxt(t), 14, y + k * 5.5); });
 
     /* Tableau */
@@ -315,5 +322,48 @@
     });
   }
 
-  window.Exports = { csv: csv, xlsx: xlsx, pdf: pdf, sauvegarde: sauvegarde };
+  /* ---------- Texte pour l'assistant IA ----------
+     Résumé de l'audit (en-tête, échantillons, constats) à coller dans l'assistant
+     qui rédige le rapport Word. Les points conformes sans commentaire et les NA sont omis. */
+  function texteAssistant(a) {
+    var L = U().LIBRE, out = [];
+    out.push("AUDIT HYGIÈNE - données saisies dans l'application");
+    out.push("Établissement : " + a.etablissement);
+    out.push("Type d'établissement : " + a.typeNom);
+    if (a.adresse) out.push("Adresse : " + a.adresse);
+    if (a.numero) out.push("N° audit : " + a.numero);
+    out.push("Date audit : " + U().dateFr(a.date));
+    if (a.auditeur) out.push("Technicienne : " + a.auditeur);
+    if (a.responsable) out.push("Responsable rencontré : " + a.responsable);
+    var ech = U().lignesEchantillons(a);
+    out.push("Échantillons prélevés : " + (ech.length ? "" : "aucun"));
+    ech.forEach(function (l) { out.push("- " + l); });
+    out.push("");
+    out.push("CONSTATS");
+    var n = 0;
+    a.grille.forEach(function (r) { r.points.forEach(function (p) {
+      var aTexte = !!(p.texte && p.texte.trim());
+      if (p.statut === "NA") return;
+      if (p.statut !== "NC" && !p.choix.length && !aTexte) return;
+      n++;
+      out.push("");
+      out.push("[" + r.titre + "] " + p.libelle + " : " + (p.statut === "NC" ? "NC (non conforme)" : p.statut === "C" ? "C (conforme, avec remarque)" : "non noté"));
+      p.choix.forEach(function (m) { out.push("- Message prédéfini : " + m); });
+      if (aTexte) out.push("- Texte libre : " + p.texte.trim());
+      if (!p.choix.length && !aTexte) out.push("- (aucun commentaire)");
+    }); });
+    if (!n) out.push("Aucun constat.");
+    return out.join("\n");
+  }
+  function assistant(a) {
+    var texte = texteAssistant(a);
+    var copie = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(texte) : Promise.reject();
+    return copie.then(function () {
+      toast("Texte copié : colle-le dans l'assistant");
+    }, function () {
+      return partager(new Blob([texte], { type: "text/plain;charset=utf-8" }), nomFichier(a, "txt"), "text/plain");
+    });
+  }
+
+  window.Exports = { csv: csv, xlsx: xlsx, pdf: pdf, sauvegarde: sauvegarde, assistant: assistant, texteAssistant: texteAssistant };
 })();

@@ -73,8 +73,18 @@
         ids: photos.filter(function (x) { return x.cible === c; }).map(function (x) { return x.id; }) };
     }).filter(function (g) { return g.ids.length; });
   }
+  /* Échantillons : [{ type: "produit" | "surface", nature }] -> lignes comme dans le rapport */
+  function lignesEchantillons(a) {
+    var e = (a.echantillons || []).filter(function (x) { return x.nature && x.nature.trim(); });
+    var prod = e.filter(function (x) { return x.type !== "surface"; });
+    var surf = e.filter(function (x) { return x.type === "surface"; });
+    return prod.map(function (x, k) { return "Nature de l'échantillon n°" + (k + 1) + " : " + x.nature.trim(); })
+      .concat(surf.map(function (x, k) {
+        return "Nature du prélèvement de surface" + (surf.length > 1 ? " n°" + (k + 1) : "") + " : " + x.nature.trim();
+      }));
+  }
   window.AuditUtils = { compter: compter, dateFr: dateFr, texteCommentaire: texteCommentaire,
-    photosDe: photosDe, groupesPhotos: groupesPhotos, LIBRE: LIBRE };
+    photosDe: photosDe, groupesPhotos: groupesPhotos, LIBRE: LIBRE, lignesEchantillons: lignesEchantillons };
 
   function barre(t, onRetour, droite) {
     titre.textContent = t;
@@ -221,7 +231,8 @@
     barre(a.etablissement, afficherAccueil);
     var c = compter(a);
     var html = '<div class="discret">' + esc(a.typeNom) + ' · ' + dateFr(a.date) + ' · ' + c.evalues + '/' + c.total + ' points évalués</div>' +
-      '<div class="progression"><div style="width:' + Math.round(c.evalues / c.total * 100) + '%"></div></div>';
+      '<div class="progression"><div style="width:' + Math.round(c.evalues / c.total * 100) + '%"></div></div>' +
+      '<button class="btn btn-bloc btn-echantillons" id="btn-echantillons">' + texteBoutonEchantillons(a) + '</button>';
 
     if (modeTableau()) {
       html += '<table class="grille"><colgroup><col style="width:16%"><col style="width:32%"><col style="width:168px"><col></colgroup>' +
@@ -247,6 +258,7 @@
     var y = window.scrollY;
     app.innerHTML = html;
     window.scrollTo(0, y);
+    document.getElementById("btn-echantillons").addEventListener("click", ouvrirEchantillons);
 
     var bas = el('<div class="barre-bas"><div class="interieur">' +
       '<button class="btn btn-principal" id="synthese">Synthèse et export</button></div></div>');
@@ -437,8 +449,66 @@
   function fermerFeuille() {
     feuille.hidden = true; feuilleFond.hidden = true; document.body.style.overflow = "";
     if (ecran === "grille") afficherGrille();
+    if (ecran === "synthese") afficherSynthese();
   }
   feuilleFond.addEventListener("click", fermerFeuille);
+
+  /* ---------- Échantillons prélevés ---------- */
+  function texteBoutonEchantillons(a) {
+    var n = (a.echantillons || []).filter(function (x) { return x.nature && x.nature.trim(); }).length;
+    return "Échantillon(s) prélevé(s)" + (n ? " : " + n : "");
+  }
+  function ouvrirEchantillons() {
+    var a = auditCourant;
+    if (!a.echantillons) a.echantillons = [];
+    feuille.innerHTML =
+      '<h3>Échantillon(s) prélevé(s)</h3>' +
+      '<p class="discret" style="margin:4px 0 12px">Repris en tête du rapport : « Nature de l\'échantillon n°1 : ... ».</p>' +
+      '<div id="liste-ech"></div>' +
+      '<div class="rangee" style="margin-top:8px"><button class="btn" id="aj-produit">+ Échantillon produit</button>' +
+      '<button class="btn" id="aj-surface">+ Prélèvement de surface</button></div>' +
+      '<div class="rangee" style="margin-top:12px"><button class="btn btn-principal" id="ech-ok">Terminé</button></div>';
+    var liste = feuille.querySelector("#liste-ech");
+    function afficher() {
+      liste.innerHTML = "";
+      if (!a.echantillons.length) {
+        liste.appendChild(el('<p class="discret">Aucun échantillon prélevé.</p>'));
+      }
+      var nProd = 0, nSurf = 0;
+      a.echantillons.forEach(function (x, k) {
+        var libelle = x.type === "surface" ? "Prélèvement de surface n°" + (++nSurf) : "Échantillon n°" + (++nProd);
+        var ligne = el('<div class="ech-ligne"><label class="champ"><span></span>' +
+          '<input autocomplete="off"></label><button class="suppr-ech" aria-label="Supprimer">&times;</button></div>');
+        ligne.querySelector("span").textContent = libelle;
+        var input = ligne.querySelector("input");
+        input.value = x.nature || "";
+        input.placeholder = x.type === "surface" ? "Plan de travail vitrine" : "Poulet mariné";
+        input.addEventListener("input", function () { x.nature = input.value; sauver(); });
+        ligne.querySelector(".suppr-ech").addEventListener("click", function () {
+          if (x.nature && x.nature.trim() && !confirm("Supprimer cet échantillon ?")) return;
+          a.echantillons.splice(k, 1); sauver(); afficher();
+        });
+        liste.appendChild(ligne);
+      });
+    }
+    function ajouter(type) {
+      a.echantillons.push({ type: type, nature: "" }); sauver(); afficher();
+      var inputs = liste.querySelectorAll("input"); var dernier = inputs[inputs.length - 1];
+      if (dernier) dernier.focus();
+    }
+    /* Ordre d'affichage : produits puis surfaces, comme dans le rapport */
+    a.echantillons.sort(function (x, y) { return (x.type === "surface") - (y.type === "surface"); });
+    afficher();
+    feuille.querySelector("#aj-produit").addEventListener("click", function () {
+      var i = a.echantillons.filter(function (x) { return x.type !== "surface"; }).length;
+      a.echantillons.splice(i, 0, { type: "produit", nature: "" }); sauver(); afficher();
+      liste.querySelectorAll("input")[i].focus();
+    });
+    feuille.querySelector("#aj-surface").addEventListener("click", function () { ajouter("surface"); });
+    feuille.querySelector("#ech-ok").addEventListener("click", fermerFeuille);
+    feuille.hidden = false; feuilleFond.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
 
   /* ---------- Synthèse ---------- */
   function afficherSynthese() {
@@ -454,6 +524,10 @@
       (a.auditeur ? ' · ' + esc(a.auditeur) : '') + (a.adresse ? '<br>' + esc(a.adresse) : '') +
       (a.responsable ? '<br>Responsable rencontré : ' + esc(a.responsable) : '') +
       (a.rapport ? '<br>Rapport : ' + esc(a.rapport) : '') + '</div></div>' +
+      '<div class="carte"><h2>Échantillon(s) prélevé(s)</h2>' +
+      (lignesEchantillons(a).length ? lignesEchantillons(a).map(function (l) { return '<div class="discret">' + esc(l) + '</div>'; }).join("")
+        : '<p class="discret">Aucun échantillon prélevé.</p>') +
+      '<button class="btn" id="modif-ech" style="margin-top:8px">Modifier</button></div>' +
       '<div class="stats">' +
       '<div class="stat"><b>' + (c.taux === null ? "–" : c.taux + " %") + '</b><span>Taux de conformité</span></div>' +
       '<div class="stat"><b style="color:var(--c)">' + c.C + '</b><span>Conformes</span></div>' +
@@ -461,12 +535,13 @@
       '<div class="stat"><b>' + (c.total - c.evalues) + '</b><span>Non évalués' + (c.NA ? ' (' + c.NA + ' NA)' : '') + '</span></div></div>' +
       '<div class="carte"><h2>Exporter</h2><p class="discret">Le menu de partage s\'ouvre : choisis Drive, Mail, Fichiers...</p>' +
       '<div class="rangee"><button class="btn" data-exp="pdf">Rapport PDF</button>' +
-      '<button class="btn" data-exp="xlsx">Excel</button><button class="btn" data-exp="csv">CSV</button></div></div>' +
+      '<button class="btn" data-exp="xlsx">Excel</button><button class="btn" data-exp="csv">CSV</button></div>' +
+      '<div class="rangee" style="margin-top:8px"><button class="btn" data-exp="assistant">Texte pour l\'assistant IA</button></div></div>' +
       '<div class="carte"><h2>Non-conformités (' + ncs.length + ')</h2>' +
       (ncs.length ? ncs.map(function (x) {
         return '<div class="nc-item"><small>' + esc(x.r) + '</small>' + esc(x.p.libelle) +
           (texteCommentaire(x.p) ? '<small>' + esc(texteCommentaire(x.p)) + '</small>' : '') +
-          ((x.p.photos || []).length ? '<small>' + x.p.photos.length + ' photo(s) en annexe</small>' : '') + '</div>';
+          (photosDe(x.p).length ? '<small>' + x.p.photos.length + ' photo(s) en annexe</small>' : '') + '</div>';
       }).join("") : '<p class="discret">Aucune non-conformité relevée.</p>') + '</div>' +
       '<div class="rangee"><button class="btn" id="terminer">' + (a.termine ? "Rouvrir l'audit" : "Marquer comme terminé") + '</button>' +
       '<button class="btn btn-danger" id="supprimer">Supprimer l\'audit</button></div>';
@@ -480,6 +555,7 @@
           .then(function () { b.textContent = texte; });
       });
     });
+    document.getElementById("modif-ech").addEventListener("click", ouvrirEchantillons);
     document.getElementById("terminer").addEventListener("click", function () {
       a.termine = !a.termine; sauver(); afficherSynthese();
       toast(a.termine ? "Audit terminé" : "Audit rouvert");

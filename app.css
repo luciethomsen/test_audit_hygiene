@@ -163,3 +163,10 @@ table.grille { width: 100%; border-collapse: collapse; table-layout: fixed; back
 
 .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 80px); transform: translateX(-50%);
   background: var(--texte); color: var(--fond); padding: 10px 16px; border-radius: 20px; z-index: 30; font-size: 14px; }
+
+/* Échantillons */
+.btn-echantillons { margin: 0 0 4px; justify-content: flex-start; color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.ech-ligne { display: flex; gap: 8px; align-items: flex-end; }
+.ech-ligne label.champ { flex: 1; margin-bottom: 10px; }
+.suppr-ech { width: 44px; height: 44px; margin-bottom: 10px; border-radius: var(--rayon); border: 1px solid var(--bordure);
+  background: var(--surface); color: var(--nc); font-size: 22px; cursor: pointer; flex-shrink: 0; }
