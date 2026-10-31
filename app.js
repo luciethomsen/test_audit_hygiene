@@ -286,7 +286,9 @@
       '<textarea id="texte-libre" placeholder="Texte libre (précisions, localisation, action corrective...)">' + esc(p.texte) + '</textarea>' +
       '<div class="photos-titre">Photos (mises en annexe avec ce commentaire)</div>' +
       '<div class="vignettes" id="vignettes"></div>' +
-      '<button class="btn btn-bloc" id="f-photo-btn">Prendre ou ajouter une photo</button>' +
+      '<div class="rangee"><button class="btn" id="f-camera-btn">Prendre une photo</button>' +
+      '<button class="btn" id="f-photo-btn">Choisir une photo</button></div>' +
+      '<input type="file" accept="image/*" capture="environment" id="f-camera" hidden>' +
       '<input type="file" accept="image/*" id="f-photo" hidden>' +
       '<div class="rangee" style="margin-top:12px"><button class="btn" id="f-effacer">Effacer</button>' +
       '<button class="btn btn-principal" id="f-ok">Valider</button></div>';
@@ -310,8 +312,8 @@
     /* Photos : enregistrées tout de suite (pas besoin de « Valider ») */
     if (!p.photos) p.photos = [];
     var vignettes = feuille.querySelector("#vignettes");
-    var inputPhoto = feuille.querySelector("#f-photo");
-    var btnPhoto = feuille.querySelector("#f-photo-btn");
+    var boutonsPhoto = [feuille.querySelector("#f-camera-btn"), feuille.querySelector("#f-photo-btn")];
+    var libellesPhoto = boutonsPhoto.map(function (b) { return b.textContent; });
     function afficherVignettes() {
       vignettes.innerHTML = "";
       p.photos.forEach(function (id) {
@@ -326,21 +328,29 @@
       });
     }
     afficherVignettes();
-    btnPhoto.addEventListener("click", function () { inputPhoto.value = ""; inputPhoto.click(); });
-    inputPhoto.addEventListener("change", function () {
-      var f = inputPhoto.files && inputPhoto.files[0]; if (!f) return;
-      btnPhoto.textContent = "Enregistrement de la photo…"; btnPhoto.disabled = true;
-      Photos.compresser(f).then(function (r) {
-        var id = Photos.nouvelId();
-        return Photos.enregistrer(id, r.dataUrl).then(function () {
-          p.photos.push(id); sauver(); afficherVignettes();
-        });
-      }).catch(function (e) {
-        toast("Photo non enregistrée : " + (e && e.message ? e.message : "erreur"));
-      }).then(function () {
-        btnPhoto.textContent = "Prendre ou ajouter une photo"; btnPhoto.disabled = false;
+    function occupe(oui) {
+      boutonsPhoto.forEach(function (b, k) {
+        b.disabled = oui; b.textContent = oui ? "Enregistrement…" : libellesPhoto[k];
       });
-    });
+    }
+    function brancher(btnId, inputId) {
+      var input = feuille.querySelector(inputId);
+      feuille.querySelector(btnId).addEventListener("click", function () { input.value = ""; input.click(); });
+      input.addEventListener("change", function () {
+        var f = input.files && input.files[0]; if (!f) return;
+        occupe(true);
+        Photos.compresser(f).then(function (r) {
+          var id = Photos.nouvelId();
+          return Photos.enregistrer(id, r.dataUrl).then(function () {
+            p.photos.push(id); sauver(); afficherVignettes();
+          });
+        }).catch(function (e) {
+          toast("Photo non enregistrée : " + (e && e.message ? e.message : "erreur"));
+        }).then(function () { occupe(false); });
+      });
+    }
+    brancher("#f-camera-btn", "#f-camera");
+    brancher("#f-photo-btn", "#f-photo");
 
     feuille.querySelector("#f-effacer").addEventListener("click", function () {
       choix = []; document.getElementById("texte-libre").value = "";
