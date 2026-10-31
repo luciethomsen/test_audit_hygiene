@@ -32,7 +32,7 @@ directement dans Excel en français). Le menu de partage du téléphone s'ouvre 
 
 ## Photos
 
-Dans la fenêtre d'un commentaire : **Prendre une photo** (appareil photo) ou **Choisir une photo** (galerie).
+Dans la fenêtre d'un commentaire, chaque sous-commentaire coché (et le texte libre) a ses boutons **Photo** (appareil photo) et **Galerie**, plus une ligne « Autre photo ».
 Les photos sont réduites (~200 Ko), numérotées dans l'ordre de la grille et placées dans l'**annexe du PDF**,
 chacune précédée du point audité, de son statut et de son commentaire. Le tableau indique « Photo n en annexe ».
 Les exports CSV / Excel mentionnent les numéros de photos (sans les images).

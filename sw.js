@@ -1,6 +1,6 @@
 /* Service worker : met l'application en cache pour un fonctionnement hors ligne.
    Augmenter VERSION à chaque mise à jour (code ou référentiels). */
-var VERSION = "audit-v5";
+var VERSION = "audit-v6";
 var FICHIERS = [
   "./", "index.html", "app.css", "app.js", "exports.js", "referentiels.js", "photos.js", "manifest.webmanifest",
   "lib/xlsx.full.min.js", "lib/jspdf.umd.min.js", "lib/jspdf.plugin.autotable.min.js",

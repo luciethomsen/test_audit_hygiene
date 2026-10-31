@@ -46,13 +46,35 @@
     r.taux = (r.C + r.NC) ? Math.round((r.C / (r.C + r.NC)) * 100) : null;
     return r;
   }
-  window.AuditUtils = { compter: compter, dateFr: dateFr, texteCommentaire: texteCommentaire };
-
   function texteCommentaire(p) {
     var parts = p.choix.slice();
     if (p.texte && p.texte.trim()) parts.push(p.texte.trim());
     return parts.join(" ; ");
   }
+
+  /* Photos d'un point : [{ id, cible }] où cible = un message prédéfini, LIBRE (texte libre) ou "" (autre).
+     Les anciennes versions stockaient seulement des identifiants : on les convertit. */
+  var LIBRE = "__libre__";
+  function photosDe(p) {
+    if (!p.photos) p.photos = [];
+    p.photos = p.photos.map(function (x) { return typeof x === "string" ? { id: x, cible: "" } : x; });
+    return p.photos;
+  }
+  /* Regroupe les photos par sous-commentaire, dans l'ordre : messages cochés, texte libre, autres. */
+  function groupesPhotos(p) {
+    var photos = photosDe(p), cibles = [];
+    p.choix.forEach(function (m) { cibles.push(m); });
+    cibles.push(LIBRE);
+    photos.forEach(function (x) { if (cibles.indexOf(x.cible) < 0 && x.cible !== "") cibles.push(x.cible); });
+    cibles.push("");
+    return cibles.map(function (c) {
+      var libelle = c === LIBRE ? (p.texte && p.texte.trim()) || "Texte libre" : c || "Autre photo";
+      return { cible: c, libelle: libelle,
+        ids: photos.filter(function (x) { return x.cible === c; }).map(function (x) { return x.id; }) };
+    }).filter(function (g) { return g.ids.length; });
+  }
+  window.AuditUtils = { compter: compter, dateFr: dateFr, texteCommentaire: texteCommentaire,
+    photosDe: photosDe, groupesPhotos: groupesPhotos, LIBRE: LIBRE };
 
   function barre(t, onRetour, droite) {
     titre.textContent = t;
@@ -241,14 +263,22 @@
     }).join("") + '</div>';
   }
   function cellCommentaire(p, i, j, tag) {
-    var contenu, nbPhotos = (p.photos || []).length;
-    var vide = !p.choix.length && !(p.texte && p.texte.trim()) && !nbPhotos;
+    var contenu, photos = photosDe(p);
+    var vide = !p.choix.length && !(p.texte && p.texte.trim()) && !photos.length;
+    function nb(cible) {
+      var n = photos.filter(function (x) { return x.cible === cible; }).length;
+      return n ? ' <span class="nb-photos">' + n + ' photo' + (n > 1 ? 's' : '') + '</span>' : "";
+    }
     if (vide) {
       contenu = "Ajouter un commentaire ou une photo";
     } else {
-      contenu = p.choix.map(function (c) { return '<span class="choix">• ' + esc(c) + '</span>'; }).join("") +
-        (p.texte && p.texte.trim() ? '<span class="choix">' + esc(p.texte.trim()) + '</span>' : "") +
-        (nbPhotos ? '<span class="nb-photos">' + nbPhotos + ' photo' + (nbPhotos > 1 ? 's' : '') + ' en annexe</span>' : "");
+      var aTexte = !!(p.texte && p.texte.trim());
+      var autres = photos.filter(function (x) {
+        return !(x.cible === LIBRE && aTexte) && p.choix.indexOf(x.cible) < 0;
+      }).length;
+      contenu = p.choix.map(function (c) { return '<span class="choix">• ' + esc(c) + nb(c) + '</span>'; }).join("") +
+        (p.texte && p.texte.trim() ? '<span class="choix">' + esc(p.texte.trim()) + nb(LIBRE) + '</span>' : "") +
+        (autres ? '<span class="choix"><span class="nb-photos">' + autres + ' autre' + (autres > 1 ? 's' : '') + ' photo' + (autres > 1 ? 's' : '') + '</span></span>' : "");
     }
     return '<' + tag + ' class="commentaire' + (vide ? ' vide-c' : '') + '" data-com="1" data-i="' + i + '" data-j="' + j + '">' + contenu + '</' + tag + '>';
   }
@@ -271,9 +301,10 @@
   });
 
   /* ---------- Feuille de commentaire ---------- */
+  /* Tout est enregistré au fur et à mesure (statut, messages, texte, photos). */
   function ouvrirFeuille(i, j) {
     var p = auditCourant.grille[i].points[j];
-    var choix = p.choix.slice();
+    photosDe(p);
     feuille.innerHTML =
       '<div class="discret">' + esc(auditCourant.grille[i].titre) + '</div>' +
       '<h3>' + esc(p.libelle) + '</h3>' +
@@ -281,85 +312,125 @@
         return '<button data-s="' + s + '" title="' + TITRES_STATUT[s] + '" class="' + (p.statut === s ? "on-" + s : "") + '">' + s + '</button>';
       }).join("") + '</div>' +
       '<div class="puces">' + p.messages.map(function (m, k) {
-        return '<button class="puce' + (choix.indexOf(m) >= 0 ? ' sel' : '') + '" data-k="' + k + '" aria-pressed="' + (choix.indexOf(m) >= 0) + '">' + esc(m) + '</button>';
+        return '<button class="puce' + (p.choix.indexOf(m) >= 0 ? ' sel' : '') + '" data-k="' + k + '" aria-pressed="' + (p.choix.indexOf(m) >= 0) + '">' + esc(m) + '</button>';
       }).join("") + '</div>' +
       '<textarea id="texte-libre" placeholder="Texte libre (précisions, localisation, action corrective...)">' + esc(p.texte) + '</textarea>' +
-      '<div class="photos-titre">Photos (mises en annexe avec ce commentaire)</div>' +
-      '<div class="vignettes" id="vignettes"></div>' +
-      '<div class="rangee"><button class="btn" id="f-camera-btn">Prendre une photo</button>' +
-      '<button class="btn" id="f-photo-btn">Choisir une photo</button></div>' +
+      '<div class="photos-titre">Photos par commentaire (mises en annexe)</div>' +
+      '<div id="lignes-photos"></div>' +
       '<input type="file" accept="image/*" capture="environment" id="f-camera" hidden>' +
       '<input type="file" accept="image/*" id="f-photo" hidden>' +
-      '<div class="rangee" style="margin-top:12px"><button class="btn" id="f-effacer">Effacer</button>' +
-      '<button class="btn btn-principal" id="f-ok">Valider</button></div>';
+      '<div class="rangee" style="margin-top:12px"><button class="btn" id="f-effacer">Effacer le commentaire</button>' +
+      '<button class="btn btn-principal" id="f-ok">Terminé</button></div>';
 
-    var statut = p.statut;
+    var zone = feuille.querySelector("#lignes-photos");
+    var texte = feuille.querySelector("#texte-libre");
+    var cibleEnCours = null;
+
     feuille.querySelectorAll("[data-s]").forEach(function (b) {
       b.addEventListener("click", function () {
-        statut = statut === b.dataset.s ? "" : b.dataset.s;
+        p.statut = p.statut === b.dataset.s ? "" : b.dataset.s;
         feuille.querySelectorAll("[data-s]").forEach(function (x) {
-          x.className = statut === x.dataset.s ? "on-" + statut : "";
+          x.className = p.statut === x.dataset.s ? "on-" + p.statut : "";
         });
+        sauver();
       });
     });
     feuille.querySelectorAll(".puce").forEach(function (b) {
       b.addEventListener("click", function () {
-        var m = p.messages[b.dataset.k], idx = choix.indexOf(m);
-        if (idx >= 0) choix.splice(idx, 1); else choix.push(m);
+        var m = p.messages[b.dataset.k], idx = p.choix.indexOf(m);
+        if (idx >= 0) p.choix.splice(idx, 1); else p.choix.push(m);
         b.classList.toggle("sel", idx < 0); b.setAttribute("aria-pressed", idx < 0);
+        sauver(); afficherLignes();
       });
     });
-    /* Photos : enregistrées tout de suite (pas besoin de « Valider ») */
-    if (!p.photos) p.photos = [];
-    var vignettes = feuille.querySelector("#vignettes");
-    var boutonsPhoto = [feuille.querySelector("#f-camera-btn"), feuille.querySelector("#f-photo-btn")];
-    var libellesPhoto = boutonsPhoto.map(function (b) { return b.textContent; });
-    function afficherVignettes() {
-      vignettes.innerHTML = "";
-      p.photos.forEach(function (id) {
-        var v = el('<div class="vignette"><img alt="Photo"><button class="suppr-photo" aria-label="Supprimer la photo">&times;</button></div>');
-        Photos.lire(id).then(function (d) { if (d) v.querySelector("img").src = d; });
-        v.querySelector(".suppr-photo").addEventListener("click", function () {
-          if (!confirm("Supprimer cette photo ?")) return;
-          p.photos = p.photos.filter(function (x) { return x !== id; });
-          sauver(); Photos.supprimer(id).catch(function () {}); afficherVignettes();
-        });
-        vignettes.appendChild(v);
-      });
+    var avaitTexte = !!texte.value.trim();
+    texte.addEventListener("input", function () {
+      p.texte = texte.value; sauver();
+      var aTexte = !!texte.value.trim();
+      if (aTexte !== avaitTexte) { avaitTexte = aTexte; afficherLignes(); }
+      else {
+        var l = ligneDe(LIBRE);
+        if (l) l.querySelector(".ligne-libelle").textContent = texte.value.trim();
+      }
+    });
+
+    /* Une ligne par sous-commentaire coché, une pour le texte libre, une « Autre photo ».
+       Une photo dont le commentaire a été décoché reste affichée pour pouvoir la supprimer. */
+    function cibles() {
+      var cs = p.choix.slice();
+      if (texte.value.trim()) cs.push(LIBRE);
+      p.photos.forEach(function (x) { if (cs.indexOf(x.cible) < 0 && x.cible !== "") cs.push(x.cible); });
+      cs.push("");
+      return cs;
     }
-    afficherVignettes();
-    function occupe(oui) {
-      boutonsPhoto.forEach(function (b, k) {
-        b.disabled = oui; b.textContent = oui ? "Enregistrement…" : libellesPhoto[k];
-      });
+    function libelleCible(c) {
+      if (c === LIBRE) return texte.value.trim() || "Texte libre";
+      if (c === "") return "Autre photo (sans commentaire précis)";
+      return c;
     }
-    function brancher(btnId, inputId) {
-      var input = feuille.querySelector(inputId);
-      feuille.querySelector(btnId).addEventListener("click", function () { input.value = ""; input.click(); });
-      input.addEventListener("change", function () {
-        var f = input.files && input.files[0]; if (!f) return;
-        occupe(true);
-        Photos.compresser(f).then(function (r) {
-          var id = Photos.nouvelId();
-          return Photos.enregistrer(id, r.dataUrl).then(function () {
-            p.photos.push(id); sauver(); afficherVignettes();
+    function ligneDe(c) {
+      var t = zone.querySelectorAll(".ligne-photo");
+      for (var k = 0; k < t.length; k++) if (t[k].dataset.cible === c) return t[k];
+      return null;
+    }
+    function afficherLignes() {
+      zone.innerHTML = "";
+      cibles().forEach(function (c) {
+        var orpheline = c !== "" && c !== LIBRE && p.choix.indexOf(c) < 0 ||
+          (c === LIBRE && !texte.value.trim());
+        var ligne = el('<div class="ligne-photo"><div class="ligne-entete"><span class="ligne-libelle"></span>' +
+          '<span class="ligne-btns"><button class="btn-mini" data-act="camera">Photo</button>' +
+          '<button class="btn-mini" data-act="galerie">Galerie</button></span></div><div class="vignettes"></div></div>');
+        ligne.dataset.cible = c;
+        ligne.querySelector(".ligne-libelle").textContent = libelleCible(c) + (orpheline ? " (décoché)" : "");
+        if (c === "") ligne.classList.add("ligne-autre");
+        var vig = ligne.querySelector(".vignettes");
+        p.photos.filter(function (x) { return x.cible === c; }).forEach(function (x) {
+          var v = el('<div class="vignette"><img alt="Photo"><button class="suppr-photo" aria-label="Supprimer la photo">&times;</button></div>');
+          Photos.lire(x.id).then(function (d) { if (d) v.querySelector("img").src = d; });
+          v.querySelector(".suppr-photo").addEventListener("click", function () {
+            if (!confirm("Supprimer cette photo ?")) return;
+            p.photos = p.photos.filter(function (y) { return y.id !== x.id; });
+            sauver(); Photos.supprimer(x.id).catch(function () {}); afficherLignes();
           });
-        }).catch(function (e) {
-          toast("Photo non enregistrée : " + (e && e.message ? e.message : "erreur"));
-        }).then(function () { occupe(false); });
+          vig.appendChild(v);
+        });
+        ligne.querySelectorAll("[data-act]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            cibleEnCours = c;
+            var input = feuille.querySelector(b.dataset.act === "camera" ? "#f-camera" : "#f-photo");
+            input.value = ""; input.click();
+          });
+        });
+        zone.appendChild(ligne);
       });
     }
-    brancher("#f-camera-btn", "#f-camera");
-    brancher("#f-photo-btn", "#f-photo");
+    afficherLignes();
+
+    function ajouterPhoto(input) {
+      var f = input.files && input.files[0]; if (!f || cibleEnCours === null) return;
+      var cible = cibleEnCours;
+      var ligne = ligneDe(cible);
+      if (ligne) ligne.querySelectorAll("[data-act]").forEach(function (b) { b.disabled = true; });
+      Photos.compresser(f).then(function (r) {
+        var id = Photos.nouvelId();
+        return Photos.enregistrer(id, r.dataUrl).then(function () {
+          p.photos.push({ id: id, cible: cible }); sauver();
+        });
+      }).catch(function (e) {
+        toast("Photo non enregistrée : " + (e && e.message ? e.message : "erreur"));
+      }).then(afficherLignes);
+    }
+    feuille.querySelector("#f-camera").addEventListener("change", function () { ajouterPhoto(this); });
+    feuille.querySelector("#f-photo").addEventListener("change", function () { ajouterPhoto(this); });
 
     feuille.querySelector("#f-effacer").addEventListener("click", function () {
-      choix = []; document.getElementById("texte-libre").value = "";
+      if ((p.choix.length || texte.value.trim()) && !confirm("Effacer les commentaires de ce point ? (les photos sont conservées)")) return;
+      p.choix = []; p.texte = ""; texte.value = ""; avaitTexte = false;
       feuille.querySelectorAll(".puce").forEach(function (b) { b.classList.remove("sel"); });
+      sauver(); afficherLignes();
     });
-    feuille.querySelector("#f-ok").addEventListener("click", function () {
-      p.choix = choix; p.texte = document.getElementById("texte-libre").value; p.statut = statut;
-      sauver(); fermerFeuille();
-    });
+    feuille.querySelector("#f-ok").addEventListener("click", fermerFeuille);
     feuille.hidden = false; feuilleFond.hidden = false;
     document.body.style.overflow = "hidden";
   }
@@ -416,7 +487,7 @@
     document.getElementById("supprimer").addEventListener("click", function () {
       if (!confirm("Supprimer définitivement cet audit ?")) return;
       a.grille.forEach(function (r) { r.points.forEach(function (p) {
-        (p.photos || []).forEach(function (id) { Photos.supprimer(id).catch(function () {}); });
+        photosDe(p).forEach(function (x) { Photos.supprimer(x.id).catch(function () {}); });
       }); });
       audits = audits.filter(function (x) { return x.id !== a.id; });
       sauver(); afficherAccueil(); toast("Audit supprimé");

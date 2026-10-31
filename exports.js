@@ -13,23 +13,38 @@
   }
   function nomFichier(a, ext) { return "audit_" + slug(a.etablissement) + "_" + a.date + "." + ext; }
 
-  /* Numérote les photos dans l'ordre de la grille : { idPhoto: 1, ... } */
+  /* Numérote les photos dans l'ordre de la grille puis des sous-commentaires : { idPhoto: 1, ... } */
   function numeroterPhotos(a) {
     var num = {}, n = 0;
     a.grille.forEach(function (r) { r.points.forEach(function (p) {
-      (p.photos || []).forEach(function (id) { num[id] = ++n; });
+      U().groupesPhotos(p).forEach(function (g) { g.ids.forEach(function (id) { num[id] = ++n; }); });
     }); });
     return num;
   }
-  function refPhotos(p, num) {
-    var ns = (p.photos || []).map(function (id) { return num[id]; }).filter(Boolean);
+  function ref(ids, num) {
+    var ns = ids.map(function (id) { return num[id]; }).filter(Boolean);
     if (!ns.length) return "";
-    return (ns.length > 1 ? "Photos " : "Photo ") + ns.join(", ") + " en annexe";
+    return " (photo" + (ns.length > 1 ? "s " : " ") + ns.join(", ") + ")";
+  }
+  /* Commentaire avec, après chaque sous-commentaire, le renvoi vers ses photos en annexe */
+  function commentaireRefs(p, num) {
+    var L = U().LIBRE, groupes = U().groupesPhotos(p), parts = [];
+    function idsDe(c) { var g = groupes.filter(function (x) { return x.cible === c; })[0]; return g ? g.ids : []; }
+    p.choix.forEach(function (m) { parts.push(m + ref(idsDe(m), num)); });
+    var aTexte = !!(p.texte && p.texte.trim());
+    if (aTexte) parts.push(p.texte.trim() + ref(idsDe(L), num));
+    var autres = [];
+    groupes.forEach(function (g) {
+      if (p.choix.indexOf(g.cible) >= 0 || (g.cible === L && aTexte)) return;
+      autres = autres.concat(g.ids);
+    });
+    if (autres.length) parts.push((autres.length > 1 ? "Autres photos" : "Autre photo") + ref(autres, num));
+    return parts.join(" ; ");
   }
   function tousIdsPhotos(audits) {
     var ids = [];
     audits.forEach(function (a) { a.grille.forEach(function (r) { r.points.forEach(function (p) {
-      (p.photos || []).forEach(function (id) { ids.push(id); });
+      U().photosDe(p).forEach(function (x) { ids.push(x.id); });
     }); }); });
     return ids;
   }
@@ -42,42 +57,41 @@
     var out = [], num = numeroterPhotos(a);
     a.grille.forEach(function (r) {
       r.points.forEach(function (p) {
-        out.push({ rubrique: r.titre, point: p.libelle, statut: p.statut,
-          commentaire: U().texteCommentaire(p), photos: refPhotos(p, num) });
+        out.push({ rubrique: r.titre, point: p.libelle, statut: p.statut, commentaire: commentaireRefs(p, num) });
       });
     });
     return out;
   }
 
-  /* ---------- Partage ---------- */
+  /* ---------- Livraison du fichier ----------
+   Un bandeau propose « Enregistrer » (dossier Téléchargements, Android / ordinateur)
+   et « Partager » (Drive, Mail, Fichiers...). Sur iPhone, « Partager » suffit :
+   il contient « Enregistrer dans Fichiers ». */
+  var IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
   function partager(blob, nom, mime) {
-    var fichier;
-    try { fichier = new File([blob], nom, { type: mime }); } catch (e) { fichier = null; }
-    if (fichier && navigator.canShare && navigator.canShare({ files: [fichier] })) {
-      return navigator.share({ files: [fichier], title: nom }).catch(function (e) {
-        if (e && e.name === "AbortError") return;
-        /* Sur iPhone, le partage doit suivre immédiatement un appui : si la préparation
-           a pris du temps (photos), on propose un bouton « Partager ». */
-        afficherPret(fichier, blob, nom);
-      });
-    }
-    telecharger(blob, nom);
-  }
-  function afficherPret(fichier, blob, nom) {
+    var fichier = null;
+    try { fichier = new File([blob], nom, { type: mime }); } catch (e) {}
+    var peutPartager = !!(fichier && navigator.canShare && navigator.canShare({ files: [fichier] }));
+    if (!peutPartager) { telecharger(blob, nom); return; }
+
     var ancien = document.querySelector(".pret"); if (ancien) ancien.remove();
     var d = document.createElement("div");
     d.className = "pret";
-    d.innerHTML = '<span></span><button class="btn btn-principal">Partager</button><button class="btn" aria-label="Fermer">&times;</button>';
+    d.innerHTML = '<span></span>' + (IOS ? '' : '<button class="btn" data-a="enr">Enregistrer</button>') +
+      '<button class="btn btn-principal" data-a="par">' + (IOS ? 'Partager / enregistrer' : 'Partager') + '</button>' +
+      '<button class="btn" data-a="fer" aria-label="Fermer">&times;</button>';
     d.querySelector("span").textContent = nom;
-    var b = d.querySelectorAll("button");
-    b[0].addEventListener("click", function () {
-      d.remove();
-      navigator.share({ files: [fichier], title: nom }).catch(function (e) {
-        if (e && e.name === "AbortError") return;
+    d.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-a]"); if (!b) return;
+      if (b.dataset.a === "enr") telecharger(blob, nom);
+      if (b.dataset.a === "par") navigator.share({ files: [fichier], title: nom }).catch(function (err) {
+        if (err && err.name === "AbortError") return;
         telecharger(blob, nom);
       });
+      d.remove();
     });
-    b[1].addEventListener("click", function () { d.remove(); });
     document.body.appendChild(d);
   }
   function telecharger(blob, nom) {
@@ -86,7 +100,7 @@
     lien.href = url; lien.download = nom;
     document.body.appendChild(lien); lien.click(); lien.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
-    toast("Fichier enregistré : " + nom);
+    toast("Enregistré dans Téléchargements : " + nom);
   }
 
   /* ---------- CSV (séparateur ; et BOM UTF-8 pour Excel en français) ---------- */
@@ -96,10 +110,10 @@
   }
   function csv(a) {
     var entete = ["N° audit", "Établissement", "Adresse", "Type d'établissement", "Date", "Auditeur",
-      "Responsable rencontré", "Rapport", "Type de points", "Points audités", "C/NC", "Commentaire / détails", "Photos"];
+      "Responsable rencontré", "Rapport", "Type de points", "Points audités", "C/NC", "Commentaire / détails"];
     var rows = [entete].concat(lignes(a).map(function (l) {
       return [a.numero || "", a.etablissement, a.adresse || "", a.typeNom, U().dateFr(a.date), a.auditeur || "",
-        a.responsable || "", a.rapport || "", l.rubrique, l.point, l.statut, l.commentaire, l.photos];
+        a.responsable || "", a.rapport || "", l.rubrique, l.point, l.statut, l.commentaire];
     }));
     var texte = "﻿" + rows.map(function (r) { return r.map(champCsv).join(";"); }).join("\r\n");
     return partager(new Blob([texte], { type: "text/csv;charset=utf-8" }), nomFichier(a, "csv"), "text/csv");
@@ -120,21 +134,21 @@
       ["Rapport", a.rapport || ""],
       ["Taux de conformité", c.taux === null ? "" : c.taux + " %"],
       [],
-      ["Type de points", "Points audités", "C/NC", "Commentaire / détails", "Photos"]
+      ["Type de points", "Points audités", "C/NC", "Commentaire / détails"]
     ];
     var debut = aoa.length;
-    var merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+    var merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
     a.grille.forEach(function (r) {
       var premiere = aoa.length;
       r.points.forEach(function (p, j) {
-        aoa.push([j === 0 ? r.titre : "", p.libelle, p.statut, U().texteCommentaire(p), refPhotos(p, num)]);
+        aoa.push([j === 0 ? r.titre : "", p.libelle, p.statut, commentaireRefs(p, num)]);
       });
       if (r.points.length > 1) merges.push({ s: { r: premiere, c: 0 }, e: { r: aoa.length - 1, c: 0 } });
     });
     var ws = XLSX.utils.aoa_to_sheet(aoa);
     ws["!merges"] = merges;
-    ws["!cols"] = [{ wch: 26 }, { wch: 48 }, { wch: 8 }, { wch: 70 }, { wch: 22 }];
-    ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: debut - 1, c: 0 }, e: { r: aoa.length - 1, c: 4 } }) };
+    ws["!cols"] = [{ wch: 26 }, { wch: 48 }, { wch: 8 }, { wch: 80 }];
+    ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: debut - 1, c: 0 }, e: { r: aoa.length - 1, c: 3 } }) };
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Audit");
     var data = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -199,8 +213,7 @@
         var ligne = [];
         if (j === 0) ligne.push({ content: pdfTxt(r.titre), rowSpan: r.points.length,
           styles: { valign: "middle", fontStyle: "bold", fillColor: [225, 239, 236], textColor: ACCENT } });
-        var com = U().texteCommentaire(p), ref = refPhotos(p, num);
-        ligne.push(pdfTxt(p.libelle), p.statut || "", pdfTxt(com + (ref ? (com ? "\n" : "") + "(" + ref + ")" : "")));
+        ligne.push(pdfTxt(p.libelle), p.statut || "", pdfTxt(commentaireRefs(p, num)));
         body.push(ligne);
       });
     });
@@ -233,58 +246,62 @@
     return doc.output("blob");
   }
 
-  /* Annexe : pour chaque point ayant des photos, le point, son statut, son commentaire, puis les photos */
+  /* Annexe : pour chaque point ayant des photos, le point et son statut,
+     puis chaque sous-commentaire suivi de ses photos */
   function annexePhotos(doc, a, photos, num, limiteBas) {
-    var groupes = [];
+    var points = [];
     a.grille.forEach(function (r) { r.points.forEach(function (p) {
-      var ids = (p.photos || []).filter(function (id) { return photos[id]; });
-      if (ids.length) groupes.push({ r: r, p: p, ids: ids });
+      var groupes = U().groupesPhotos(p).map(function (g) {
+        return { libelle: g.libelle, ids: g.ids.filter(function (id) { return photos[id]; }) };
+      }).filter(function (g) { return g.ids.length; });
+      if (groupes.length) points.push({ r: r, p: p, groupes: groupes });
     }); });
-    if (!groupes.length) return;
+    if (!points.length) return;
 
-    var HAUT = 18, LARG_MAX = 130, HAUT_MAX = 100;
+    var HAUT = 18, LARG_MAX = 130, HAUT_MAX = 100, y;
     doc.addPage();
     doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
     doc.text("Annexe - Photos", 14, HAUT);
-    var y = HAUT + 9;
+    y = HAUT + 9;
 
-    groupes.forEach(function (g) {
-      var com = U().texteCommentaire(g.p) || "Pas de commentaire.";
-      doc.setFontSize(9.5);
-      var lignesCom = doc.splitTextToSize(pdfTxt(com), 182);
-      var hEntete = 6 + lignesCom.length * 4.3 + 3;
-      if (y + hEntete + 45 > limiteBas) { doc.addPage(); y = HAUT; }
-
+    function enTetePoint(pt, suite) {
       doc.setFillColor(225, 239, 236); doc.rect(14, y - 4.5, 182, 6.5, "F");
       doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
-      var titre = pdfTxt(g.r.titre + " > " + g.p.libelle);
-      doc.text(doc.splitTextToSize(titre, 160)[0], 16, y);
-      if (g.p.statut) {
-        var col = couleurStatut(g.p.statut);
+      doc.text(doc.splitTextToSize(pdfTxt(pt.r.titre + " > " + pt.p.libelle + (suite ? " (suite)" : "")), 160)[0], 16, y);
+      if (pt.p.statut) {
+        var col = couleurStatut(pt.p.statut);
         doc.setTextColor(col[0], col[1], col[2]);
-        doc.text(g.p.statut, 194, y, { align: "right" });
+        doc.text(pt.p.statut, 194, y, { align: "right" });
       }
-      y += 6;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(30, 30, 30);
-      doc.text(lignesCom, 14, y);
-      y += lignesCom.length * 4.3 + 3;
+      y += 7;
+    }
 
-      g.ids.forEach(function (id) {
-        var prop = doc.getImageProperties(photos[id]);
-        var w = LARG_MAX, h = w * prop.height / prop.width;
-        if (h > HAUT_MAX) { h = HAUT_MAX; w = h * prop.width / prop.height; }
-        if (y + h + 7 > limiteBas) {
-          doc.addPage(); y = HAUT;
-          doc.setFont("helvetica", "italic"); doc.setFontSize(8.5); doc.setTextColor(120);
-          doc.text(pdfTxt("(suite) " + g.p.libelle), 14, y); y += 5;
-        }
-        doc.addImage(photos[id], "JPEG", 14, y, w, h, id);
-        doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(80);
-        doc.text("Photo " + num[id], 14, y + h + 4);
-        y += h + 9;
+    points.forEach(function (pt) {
+      if (y + 60 > limiteBas) { doc.addPage(); y = HAUT; }
+      enTetePoint(pt, false);
+      pt.groupes.forEach(function (g) {
+        doc.setFontSize(9.5);
+        var lignes = doc.splitTextToSize(pdfTxt(g.libelle), 182);
+        g.ids.forEach(function (id, k) {
+          var prop = doc.getImageProperties(photos[id]);
+          var w = LARG_MAX, h = w * prop.height / prop.width;
+          if (h > HAUT_MAX) { h = HAUT_MAX; w = h * prop.width / prop.height; }
+          var hTexte = k === 0 ? lignes.length * 4.3 + 1.5 : 0;
+          if (y + hTexte + h + 7 > limiteBas) { doc.addPage(); y = HAUT; enTetePoint(pt, true); if (k > 0) hTexte = -1; }
+          if (k === 0 || hTexte === -1) {
+            /* Le sous-commentaire précède ses photos */
+            doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(30, 30, 30);
+            doc.text(lignes, 14, y);
+            y += lignes.length * 4.3 + 1.5;
+          }
+          doc.addImage(photos[id], "JPEG", 14, y, w, h, id);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(90);
+          doc.text("Photo " + num[id], 14, y + h + 4);
+          y += h + 9;
+        });
       });
       doc.setDrawColor(210); doc.setLineWidth(0.2); doc.line(14, y - 3, 196, y - 3);
-      y += 3;
+      y += 4;
     });
   }
 
