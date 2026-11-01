@@ -189,13 +189,19 @@
     var limiteBas = E.mention ? 274 : 282;
 
     /* En-tête */
+    /* Logo CHSA 2026 à gauche, puis cadre avec les coordonnées */
+    var xCadre = 14;
+    if (window.LOGO_CHSA) {
+      var hLogo = 21, lLogo = hLogo * LOGO_CHSA.largeur / LOGO_CHSA.hauteur;
+      try { doc.addImage(LOGO_CHSA.dataUrl, "PNG", 14, 7.5, lLogo, hLogo, "logo_chsa"); xCadre = 14 + lLogo + 3; } catch (err) {}
+    }
     if (E.societe) {
-      doc.setDrawColor(30); doc.setLineWidth(0.4); doc.rect(14, 9, 92, 18);
+      doc.setDrawColor(30); doc.setLineWidth(0.4); doc.rect(xCadre, 9, 92, 18);
       doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(30, 30, 30);
-      doc.text(pdfTxt(E.societe), 16, 14);
+      doc.text(pdfTxt(E.societe), xCadre + 2, 14);
       doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
-      if (E.adresse) doc.text(pdfTxt(E.adresse), 16, 19);
-      if (E.contact) doc.text(pdfTxt(E.contact), 16, 24);
+      if (E.adresse) doc.text(pdfTxt(E.adresse), xCadre + 2, 19);
+      if (E.contact) doc.text(pdfTxt(E.contact), xCadre + 2, 24);
     }
     doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
     doc.text(pdfTxt("Audit hygiène" + (a.numero ? " n° " + a.numero : "")), 196, 15, { align: "right" });

@@ -176,3 +176,7 @@ table.grille { width: 100%; border-collapse: collapse; table-layout: fixed; back
 .zone-danger summary { cursor: pointer; color: var(--texte-2); font-size: 14px; min-height: 32px; display: flex; align-items: center; }
 .zone-danger[open] summary { margin-bottom: 8px; }
 .btn-danger[disabled] { opacity: .45; }
+.entete-grille { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.logo-chsa { width: 72px; height: auto; flex-shrink: 0; }
+.entete-titre { font-weight: 600; font-size: 16px; }
+@media (prefers-color-scheme: dark) { .logo-chsa { background: #fff; border-radius: 10px; padding: 3px; } }

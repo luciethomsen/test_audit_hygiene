@@ -67,7 +67,11 @@ const GRILLE = [
       { libelle: "Fait maison",
         messages: ["Logo / mention absent", "Mention utilisée à tort", "Affichage non conforme"] },
       { libelle: "Existence du PMS / DU (analyse microbio)",
-        messages: ["PMS absent", "PMS non à jour", "Document unique absent", "Analyses microbiologiques absentes", "Analyses non à jour"] }
+        messages: ["PMS absent", "PMS non à jour", "Document unique absent", "Analyses microbiologiques absentes", "Analyses non à jour"] },
+      { libelle: "CERFA 13984 (déclaration manipulation denrées animales, tamponné)",
+        messages: ["Déclaration non réalisée", "Cerfa non tamponné par la DDPP", "Cerfa non présenté lors de l'audit", "Changement d'exploitant non déclaré", "Copie absente du classeur hygiène"] },
+      { libelle: "Procédure en cas de TIAC",
+        messages: ["Procédure absente", "Procédure non accessible au personnel", "Procédure non connue du personnel", "Procédure non à jour (coordonnées DDPP / ARS)"] }
     ]
   },
   {
@@ -81,6 +85,8 @@ const GRILLE = [
         messages: ["Zones difficiles d'accès", "Matériel non déplaçable", "Encombrement", "Revêtements non lessivables"] },
       { libelle: "Plan de nettoyage/désinfection",
         messages: ["Plan absent", "Plan non affiché", "Plan non à jour", "Enregistrements non renseignés"] },
+      { libelle: "Suivi du nettoyage (fiche de suivi remplie)",
+        messages: ["Fiche de suivi absente", "Fiche de suivi non remplie", "Fiche remplie partiellement", "Surfaces nettoyées / opérateur non indiqués", "Fiche non à jour"] },
       { libelle: "Séparation des produits d'entretien",
         messages: ["Stockés avec les denrées", "Stockés au-dessus des denrées", "Pas de zone dédiée"] },
       { libelle: "Conformité des produits nettoyage/désinfection",
@@ -140,7 +146,11 @@ const GRILLE = [
       { libelle: "Présence des dates de fabric. / ouverture / congél.", messages: ["Date de fabrication absente", "Date d'ouverture absente", "Date de congélation absente", "Étiquetage illisible"] },
       { libelle: "Rotation des stocks (FIFO)", messages: ["FIFO non respecté", "Produits anciens au fond", "Stock excessif"] },
       { libelle: "Contenants (ne pas réutiliser emballages des MP)", messages: ["Emballages de matières premières réutilisés", "Contenants non alimentaires", "Contenants abîmés"] },
-      { libelle: "Identification des produits destinés au personnel", messages: ["Produits du personnel non identifiés", "Mélangés avec les denrées", "Pas de zone dédiée"] }
+      { libelle: "Identification des produits destinés au personnel", messages: ["Produits du personnel non identifiés", "Mélangés avec les denrées", "Pas de zone dédiée"] },
+      { libelle: "Œufs (boîte plastique fermée, au frais)",
+        messages: ["Œufs stockés à température ambiante", "Œufs dans le carton d'origine", "Alvéoles en carton", "Boîte non fermée / sans couvercle", "Œufs au contact d'autres denrées"] },
+      { libelle: "Machine de mise sous vide",
+        messages: ["Poches mal mises sous vide (présence d'air)", "Personnel non formé à l'utilisation", "Procédure de mise sous vide non affichée", "Produits sous vide non étiquetés / non datés", "Pas de DLC secondaire sur les produits sous vide", "Intérieur de la machine sale"] }
     ]
   },
   {
@@ -150,7 +160,13 @@ const GRILLE = [
       { libelle: "Température chambres froides (4°)", messages: ["Température > 4 °C", "Afficheur absent / défectueux", "Pas de thermomètre"] },
       { libelle: "Température réfrigérateurs (4°)", messages: ["Température > 4 °C", "Pas de thermomètre", "Réfrigérateur surchargé"] },
       { libelle: "Température banques réfrigérées (4°)", messages: ["Température > 4 °C", "Pas de thermomètre", "Couvercles / portes laissés ouverts"] },
-      { libelle: "Suivi Contrôle journalier des températures", messages: ["Relevés non effectués", "Relevés incomplets", "Écarts non traités", "Pas d'action corrective notée"] }
+      { libelle: "Suivi Contrôle journalier des températures", messages: ["Relevés non effectués", "Relevés incomplets", "Écarts non traités", "Pas d'action corrective notée"] },
+      { libelle: "Refroidissement (63 °C à 10 °C en moins de 2 h)",
+        messages: ["Refroidissement trop lent (plus de 2 h)", "Préparations chaudes mises directement au réfrigérateur", "Pas de bain d'eau glacée / glaçons", "Refroidissement à température ambiante", "Pas de procédure de refroidissement"] },
+      { libelle: "Suivi du refroidissement",
+        messages: ["Suivi non réalisé", "Fiche de suivi absente", "Suivi incomplet", "Heures / températures d'entrée et de sortie non notées"] },
+      { libelle: "Cellule de refroidissement",
+        messages: ["Absence de cellule de refroidissement", "Cellule non utilisée", "Cellule sale", "Film de protection non retiré", "Cellule défectueuse"] }
     ]
   },
   {

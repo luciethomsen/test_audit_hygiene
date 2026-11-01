@@ -228,6 +228,7 @@
   function ouvrirAudit(id) {
     auditCourant = audits.find(function (a) { return a.id === id; });
     if (!auditCourant) return afficherAccueil();
+    window.scrollTo(0, 0);
     afficherGrille();
   }
 
@@ -238,7 +239,9 @@
     var a = auditCourant;
     barre(a.etablissement, afficherAccueil);
     var c = compter(a);
-    var html = '<div class="discret">' + esc(a.typeNom) + ' · ' + dateFr(a.date) + ' · ' + c.evalues + '/' + c.total + ' points évalués</div>' +
+    var html = '<div class="entete-grille"><img src="icons/logo_chsa_2026.png" alt="CHSA 2026" class="logo-chsa">' +
+      '<div><div class="entete-titre">Audit hygiène' + (a.numero ? ' n° ' + esc(a.numero) : '') + '</div>' +
+      '<div class="discret">' + esc(a.typeNom) + ' · ' + dateFr(a.date) + ' · ' + c.evalues + '/' + c.total + ' points évalués</div></div></div>' +
       '<div class="progression"><div style="width:' + Math.round(c.evalues / c.total * 100) + '%"></div></div>' +
       '<button class="btn btn-bloc btn-echantillons" id="btn-echantillons">' + texteBoutonEchantillons(a) + '</button>';
 
