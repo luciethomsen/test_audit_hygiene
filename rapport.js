@@ -69,12 +69,46 @@
     vider();
     return out;
   }
+  /* ---------- Phrases rédigées par l'IA (absentes de la bibliothèque) ----------
+     Chaque phrase est comparée aux phrases de référence (biblio.js) par paires de mots consécutifs,
+     sans tenir compte des accents, de la ponctuation, des parenthèses (précisions propres à l'audit)
+     ni de la mention « Document joint ». Moins de 60 % de paires retrouvées dans la meilleure phrase
+     de référence = phrase nouvelle -> surlignée en jaune. */
+  var SEUIL = 0.6, REFS = null;
+  var TAG = /\[\s*À\s*VÉRIFIER\s*\]/gi;
+  function mots(t) {
+    return String(t).replace(/\([^()]*\)/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+      .replace(/\[\s*a\s*verifier\s*\]/g, " ").replace(/documents? joints? a ce rapport/g, " ")
+      .replace(/[’']/g, " ").replace(/[^a-z0-9°]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  }
+  function paires(m) { var s = {}, n = 0; for (var i = 0; i < m.length - 1; i++) { var k = m[i] + " " + m[i + 1]; if (!s[k]) { s[k] = 1; n++; } } return { s: s, n: n }; }
+  function score(texte) {
+    if (!REFS) REFS = (window.BIBLIOTHEQUE_CHSA || []).map(function (t) { return paires(mots(t)).s; });
+    var p = paires(mots(texte));
+    if (p.n < 3 || !REFS.length) return 1;
+    var meilleur = 0;
+    for (var r = 0; r < REFS.length && meilleur < 1; r++) {
+      var n = 0; for (var k in p.s) if (REFS[r][k]) n++;
+      if (n / p.n > meilleur) meilleur = n / p.n;
+    }
+    return meilleur;
+  }
+  function estNouvelle(texte) { TAG.lastIndex = 0; return TAG.test(texte) || score(texte) < SEUIL; }
+  /* Pour l'écran Rapport Word : nombre de phrases et de phrases nouvelles */
+  function analyser(texte) {
+    var r = { phrases: 0, nouvelles: 0, sections: 0 };
+    lire(texte).forEach(function (s) { r.sections++; s.lignes.forEach(function (l) { r.phrases++; if (estNouvelle(l.texte)) r.nouvelles++; }); });
+    return r;
+  }
+
   var PPR_PUCE = '<w:pPr><w:keepLines/><w:spacing w:before="160"/><w:jc w:val="both"/></w:pPr>';
   var P_VIDE = '<w:p><w:pPr><w:spacing w:before="160"/><w:jc w:val="both"/></w:pPr></w:p>';
   function paragraphe(ligne) {
-    var aVerifier = /\[\s*À\s*VÉRIFIER\s*\]/i.test(ligne.texte);
-    return "<w:p>" + PPR_PUCE + (ligne.puce ? run("- ", false, false, aVerifier) : "") +
-      runsMarkdown(ligne.texte, aVerifier) + "</w:p>";
+    var nouvelle = estNouvelle(ligne.texte);
+    /* le surlignage jaune remplace la mention [À VÉRIFIER] */
+    var texte = ligne.texte.replace(TAG, "").replace(/\s+([.,])/g, "$1").replace(/\s{2,}/g, " ").trim();
+    return "<w:p>" + PPR_PUCE + (ligne.puce ? run("- ", false, false, nouvelle) : "") +
+      runsMarkdown(texte, nouvelle) + "</w:p>";
   }
 
   /* Trouve le paragraphe <w:p>...</w:p> qui contient un champ */
@@ -224,5 +258,5 @@
     return "CHSA_" + nom + "_" + d + ".docx";
   }
 
-  window.RapportWord = { generer: generer, lire: lire, nomFichier: nomFichier };
+  window.RapportWord = { generer: generer, lire: lire, nomFichier: nomFichier, analyser: analyser, score: score };
 })();

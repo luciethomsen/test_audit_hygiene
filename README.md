@@ -48,7 +48,8 @@ Synthèse et export > **Préparer le rapport Word** :
 
 L'adresse du projet se règle une fois dans Accueil > **Réglages**. Le Word est produit à partir de
 `modele_rapport.docx` (logos, lettre, références réglementaires) : sections numérotées 1 à 4,
-phrases [À VÉRIFIER] surlignées en jaune, photos en annexe. Un relais IA payant à l'usage reste possible
+phrases absentes de la bibliothèque CHSA (rédigées par l'IA) surlignées en jaune, photos en annexe.
+La comparaison utilise `biblio.js` (copie de la bibliothèque) : à régénérer si la bibliothèque du Projet Claude change. Un relais IA payant à l'usage reste possible
 (Réglages, facultatif), mais n'est pas nécessaire.
 
 ## Données
@@ -64,7 +65,7 @@ Les audits sont stockés **sur l'appareil uniquement**. Utiliser régulièrement
 | `app.js` | Écrans, saisie, stockage local |
 | `exports.js` | Exports CSV, Excel, PDF (avec annexe photos), sauvegarde |
 | `photos.js` | Stockage et compression des photos |
-| `rapport.js`, `modele_rapport.docx` | Rapport Word au format CHSA |
+| `rapport.js`, `modele_rapport.docx`, `biblio.js` | Rapport Word au format CHSA, repérage des phrases rédigées par l'IA |
 | `referentiels.js` | **Grilles d'audit à personnaliser** |
 | `app.css` | Apparence (thème clair/sombre automatique) |
 | `sw.js` | Mode hors ligne |

@@ -588,7 +588,7 @@
       '<p class="discret" id="w-etat" style="margin:6px 0 12px"></p>' +
       (relais ? '<button class="btn btn-bloc" id="w-ia">' + (a.rapportTexte ? "Rédiger à nouveau via le relais" : "Rédiger via le relais") + '</button>' : '') +
       '<textarea id="w-texte" class="texte-rapport" placeholder="## 1. LOCAUX - EQUIPEMENTS&#10;- **Action** ..."></textarea>' +
-      '<p class="discret" style="margin-top:6px">Tu peux corriger le texte ici. Les lignes [À VÉRIFIER] seront surlignées en jaune dans le Word. Ce qui suit la ligne « --- » (notes de l\'assistant) n\'est pas repris.</p></div>';
+      '<p class="discret" style="margin-top:6px">Tu peux corriger le texte ici. Les phrases absentes de la bibliothèque CHSA (rédigées par l\'IA) seront surlignées en jaune dans le Word. Ce qui suit la ligne « --- » (notes de l\'assistant) n\'est pas repris.</p></div>';
     var champs = { "w-civ": "civilite", "w-adr": "adresse", "w-cpv": "cpVille", "w-num": "numero", "w-tech": "auditeur", "w-texte": "rapportTexte" };
     Object.keys(champs).forEach(function (id) {
       var e = document.getElementById(id);
@@ -615,7 +615,11 @@
         var n = RapportWord.lire(t).length;
         if (!n) etatTxt.textContent = "Texte collé, mais aucune section « 1. LOCAUX - EQUIPEMENTS »... trouvée : vérifie que c'est bien la réponse de l'assistant.";
         else if (t.indexOf("**") < 0) etatTxt.textContent = "Texte collé, mais sans le gras : copie la réponse avec le bouton « Copier » sous la réponse plutôt qu'en sélectionnant le texte.";
-        else etatTxt.textContent = "Réponse collée (" + n + " section" + (n > 1 ? "s" : "") + "). Relis-la, puis génère le Word.";
+        else {
+          var an = RapportWord.analyser(t);
+          etatTxt.textContent = "Réponse collée : " + an.phrases + " recommandations, dont " + an.nouvelles +
+            " rédigée" + (an.nouvelles > 1 ? "s" : "") + " par l'IA (surlignée" + (an.nouvelles > 1 ? "s" : "") + " en jaune dans le Word). Relis, puis génère le Word.";
+        }
       }
       if (navigator.clipboard && navigator.clipboard.readText) {
         navigator.clipboard.readText().then(appliquer, function () {
@@ -688,8 +692,11 @@
           (texteCommentaire(x.p) ? '<small>' + esc(texteCommentaire(x.p)) + '</small>' : '') +
           (photosDe(x.p).length ? '<small>' + x.p.photos.length + ' photo(s) en annexe</small>' : '') + '</div>';
       }).join("") : '<p class="discret">Aucune non-conformité relevée.</p>') + '</div>' +
-      '<div class="rangee"><button class="btn" id="terminer">' + (a.termine ? "Rouvrir l'audit" : "Marquer comme terminé") + '</button>' +
-      '<button class="btn btn-danger" id="supprimer">Supprimer l\'audit</button></div>';
+      '<button class="btn btn-bloc" id="terminer">' + (a.termine ? "Rouvrir l'audit" : "Marquer comme terminé") + '</button>' +
+      '<details class="zone-danger"><summary>Autres actions</summary>' +
+      '<p class="discret">La suppression efface définitivement l\'audit et ses photos de cet appareil. Pense à exporter une sauvegarde avant.</p>' +
+      '<label class="champ"><span>Pour confirmer, tape SUPPRIMER</span><input id="conf-suppr" autocomplete="off" autocapitalize="characters"></label>' +
+      '<button class="btn btn-danger btn-bloc" id="supprimer" disabled>Supprimer définitivement l\'audit</button></details>';
 
     app.querySelectorAll("[data-exp]").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -706,8 +713,10 @@
       a.termine = !a.termine; sauver(); afficherSynthese();
       toast(a.termine ? "Audit terminé" : "Audit rouvert");
     });
-    document.getElementById("supprimer").addEventListener("click", function () {
-      if (!confirm("Supprimer définitivement cet audit ?")) return;
+    var confSuppr = document.getElementById("conf-suppr"), btnSuppr = document.getElementById("supprimer");
+    confSuppr.addEventListener("input", function () { btnSuppr.disabled = confSuppr.value.trim().toUpperCase() !== "SUPPRIMER"; });
+    btnSuppr.addEventListener("click", function () {
+      if (confSuppr.value.trim().toUpperCase() !== "SUPPRIMER") return;
       a.grille.forEach(function (r) { r.points.forEach(function (p) {
         photosDe(p).forEach(function (x) { Photos.supprimer(x.id).catch(function () {}); });
       }); });
